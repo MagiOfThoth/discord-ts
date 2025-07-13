@@ -34,6 +34,7 @@ let settings = loadSettings();
 
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  await client.guilds.fetch(); // Ensure cache is ready
   await registerSlashCommands();
 });
 
