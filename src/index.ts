@@ -154,7 +154,7 @@ async function registerSlashCommands() {
       .setDescription('View the current alert settings')
   ].map(command => command.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(process.env.Discord_Bot_Token);
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   try {
     const clientId = client.user.id;
     const guilds = client.guilds.cache.map(g => g.id);
@@ -167,4 +167,4 @@ async function registerSlashCommands() {
   }
 }
 
-client.login(process.env.Discord_Bot_Token);
+client.login(process.env.DISCORD_TOKEN);
