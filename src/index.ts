@@ -17,7 +17,7 @@ const client = new Client({
 
 const TARGET_EMOJI = '🛎';
 const RESOLVE_EMOJI = '✅';
-const SETTINGS_FILE = 'src/settings.json';
+const SETTINGS_FILE = 'settings.json';
 let flaggedMessages = {};
 
 // Load/save settings from a file
@@ -39,6 +39,9 @@ client.once(Events.ClientReady, async () => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  if (!interaction.guild) {
+    return interaction.reply({ content: '❌ This command can only be used in servers.', ephemeral: true });
+  }
 
   const gid = interaction.guild.id;
   const commandName = interaction.commandName;
@@ -112,6 +115,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   } else if (reaction.emoji.name === RESOLVE_EMOJI) {
     if (!member.roles.cache.has(roleId)) return; // not a mod
 
+    // Find original flagged message
     const originalId = Object.keys(flaggedMessages).find(key => flaggedMessages[key] === message.id);
     if (!originalId) return;
 
