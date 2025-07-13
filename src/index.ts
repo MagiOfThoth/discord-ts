@@ -81,6 +81,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
+    console.log(`🧪 Reaction detected: ${reaction.emoji.name} by ${user.tag}`);
+
     if (reaction.partial) await reaction.fetch();
     if (reaction.message.partial) await reaction.message.fetch();
     if (user.partial) await user.fetch();
