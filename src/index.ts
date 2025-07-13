@@ -20,7 +20,6 @@ const RESOLVE_EMOJI = '✅';
 const SETTINGS_FILE = 'settings.json';
 let flaggedMessages = {};
 
-// Load/save settings from a file
 function loadSettings() {
   if (!fs.existsSync(SETTINGS_FILE)) return {};
   return JSON.parse(fs.readFileSync(SETTINGS_FILE));
@@ -34,7 +33,7 @@ let settings = loadSettings();
 
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  await client.guilds.fetch(); // Ensure cache is ready
+  await client.guilds.fetch();
   await registerSlashCommands();
 });
 
@@ -81,55 +80,62 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
-  if (user.bot) return;
+  try {
+    if (reaction.partial) await reaction.fetch();
+    if (reaction.message.partial) await reaction.message.fetch();
+    if (user.partial) await user.fetch();
 
-  const { message } = reaction;
-  const guild = message.guild;
-  const gid = guild?.id;
-  if (!gid || !settings[gid]) return;
+    if (user.bot) return;
 
-  const roleId = settings[gid].role_id_to_ping;
-  const adminChannelId = settings[gid].admin_channel_id;
-  const adminChannel = guild.channels.cache.get(adminChannelId);
-  const member = await guild.members.fetch(user.id);
+    const { message } = reaction;
+    const guild = message.guild;
+    const gid = guild?.id;
+    if (!gid || !settings[gid]) return;
 
-  if (reaction.emoji.name === TARGET_EMOJI) {
-    if (flaggedMessages[message.id]) return; // already flagged
+    const roleId = settings[gid].role_id_to_ping;
+    const adminChannelId = settings[gid].admin_channel_id;
+    const adminChannel = guild.channels.cache.get(adminChannelId);
+    const member = await guild.members.fetch(user.id);
 
-    const msgPreview = message.content ? message.content.slice(0, 1024) : '[No content]';
-    const msgLink = `https://discord.com/channels/${guild.id}/${message.channel.id}/${message.id}`;
+    if (reaction.emoji.name === TARGET_EMOJI) {
+      if (flaggedMessages[message.id]) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('🔔 Message Flagged')
-      .setDescription(`${user} reacted with ${TARGET_EMOJI} in <#${message.channel.id}>`)
-      .addFields(
-        { name: 'Quoted Message', value: msgPreview },
-        { name: 'Jump to Message', value: `[Click here to view](${msgLink})` }
-      )
-      .setFooter({ text: `Message ID: ${message.id}` })
-      .setColor(0xFFA500);
+      const msgPreview = message.content ? message.content.slice(0, 1024) : '[No content]';
+      const msgLink = `https://discord.com/channels/${guild.id}/${message.channel.id}/${message.id}`;
 
-    const botMsg = await adminChannel.send({ content: `<@&${roleId}>`, embeds: [embed] });
-    await botMsg.react(RESOLVE_EMOJI);
-    flaggedMessages[message.id] = botMsg.id;
+      const embed = new EmbedBuilder()
+        .setTitle('🔔 Message Flagged')
+        .setDescription(`${user} reacted with ${TARGET_EMOJI} in <#${message.channel.id}>`)
+        .addFields(
+          { name: 'Quoted Message', value: msgPreview },
+          { name: 'Jump to Message', value: `[Click here to view](${msgLink})` }
+        )
+        .setFooter({ text: `Message ID: ${message.id}` })
+        .setColor(0xFFA500);
 
-  } else if (reaction.emoji.name === RESOLVE_EMOJI) {
-    if (!member.roles.cache.has(roleId)) return; // not a mod
+      const botMsg = await adminChannel.send({ content: `<@&${roleId}>`, embeds: [embed] });
+      await botMsg.react(RESOLVE_EMOJI);
+      flaggedMessages[message.id] = botMsg.id;
 
-    // Find original flagged message
-    const originalId = Object.keys(flaggedMessages).find(key => flaggedMessages[key] === message.id);
-    if (!originalId) return;
+    } else if (reaction.emoji.name === RESOLVE_EMOJI) {
+      if (!member.roles.cache.has(roleId)) return;
 
-    try {
-      const originalMsg = await message.channel.messages.fetch(originalId);
-      await originalMsg.reactions.resolve(TARGET_EMOJI)?.remove();
-    } catch {}
+      const originalId = Object.keys(flaggedMessages).find(key => flaggedMessages[key] === message.id);
+      if (!originalId) return;
 
-    try {
-      await message.delete();
-    } catch {}
+      try {
+        const originalMsg = await message.channel.messages.fetch(originalId);
+        await originalMsg.reactions.resolve(TARGET_EMOJI)?.remove();
+      } catch {}
 
-    delete flaggedMessages[originalId];
+      try {
+        await message.delete();
+      } catch {}
+
+      delete flaggedMessages[originalId];
+    }
+  } catch (err) {
+    console.error('❌ Reaction handler failed:', err);
   }
 });
 
