@@ -7,7 +7,8 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
-  Interaction
+  Interaction,
+  TextBasedChannel
 } from 'discord.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -54,7 +55,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction): Promise<vo
 
   if (commandName === 'setalertchannel') {
     const channel = interaction.options.getChannel('channel');
-    if (!channel || !channel.isTextBased()) return;
+    if (!channel || !TextBasedChannel.isTextBased(channel)) return;
 
     settings[gid] = settings[gid] || {};
     settings[gid].admin_channel_id = channel.id;
@@ -74,7 +75,10 @@ client.on(Events.InteractionCreate, async (interaction: Interaction): Promise<vo
 
   } else if (commandName === 'viewalertsettings') {
     const guildSettings = settings[gid];
-    if (!guildSettings) return await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+    if (!guildSettings) {
+      await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+      return;
+    }
 
     const role = interaction.guild.roles.cache.get(guildSettings.role_id_to_ping);
     const channel = interaction.guild.channels.cache.get(guildSettings.admin_channel_id);
@@ -128,7 +132,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         .setColor(0xFFA500);
 
       console.log(`📢 Sending alert to <#${adminChannelId}> tagging <@&${roleId}>`);
-      const botMsg = await (adminChannel as any).send({ content: `<@&${roleId}>`, embeds: [embed] });
+      const botMsg = await (adminChannel as TextBasedChannel).send({ content: `<@&${roleId}>`, embeds: [embed] });
       await botMsg.react(RESOLVE_EMOJI);
       flaggedMessages[message.id] = botMsg.id;
 
@@ -149,17 +153,19 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       }
 
       try {
-        const originalChannel = await guild.channels.fetch(reaction.message.channelId);
-        if (originalChannel?.isTextBased()) {
-          const originalMessage = await originalChannel.messages.fetch(originalId);
-          await originalMessage.reactions.resolve(TARGET_EMOJI)?.remove();
-          console.log(`🧹 Removed 🛎️ from flagged message: ${originalId}`);
-        }
+        const originalChannel = message.channel;
+        const originalMessage = await originalChannel.messages.fetch(originalId);
+        await originalMessage.reactions.resolve(TARGET_EMOJI)?.remove();
+        console.log(`🧹 Removed 🛎️ from flagged message: ${originalId}`);
+      } catch (err) {
+        console.warn('⚠️ Could not remove 🛎️ from original message');
+      }
 
-        await reaction.message.delete();
+      try {
+        await message.delete();
         console.log(`🗑️ Deleted alert message: ${alertMessageId}`);
       } catch (err) {
-        console.error('❌ Error resolving alert:', err);
+        console.warn('⚠️ Could not delete alert message');
       }
 
       delete flaggedMessages[originalId];
