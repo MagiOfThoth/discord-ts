@@ -10,12 +10,6 @@ import {
   TextBasedChannel,
   TextChannel,
   Channel,
-  NewsChannel,
-  ThreadChannel,
-  CategoryChannel,
-  StageChannel,
-  VoiceChannel,
-  ForumChannel,
 } from 'discord.js';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -58,25 +52,15 @@ function saveSettings(settings: Settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
-// Type guard to check channel is a Discord.js Channel class (excluding raw API types)
-function isDiscordJSChannel(
-  channel: Channel | null | undefined
-): channel is
-  | TextChannel
-  | NewsChannel
-  | ThreadChannel
-  | CategoryChannel
-  | StageChannel
-  | VoiceChannel
-  | ForumChannel {
-  if (!channel) return false;
-  // This check excludes raw API channels by verifying channel has 'isTextBased' method and 'type' property
-  return typeof (channel as any).isTextBased === 'function' && typeof (channel as any).type !== 'undefined';
-}
-
-// More specific guard for text-based channels:
-function isTextBasedChannel(channel: Channel | null | undefined): channel is TextBasedChannel {
-  return isDiscordJSChannel(channel) && channel.isTextBased();
+// Safe runtime check for TextBasedChannel
+function isTextBasedChannel(channel: unknown): channel is TextBasedChannel {
+  return (
+    typeof channel === 'object' &&
+    channel !== null &&
+    'isTextBased' in channel &&
+    typeof (channel as any).isTextBased === 'function' &&
+    (channel as any).isTextBased()
+  );
 }
 
 client.once(Events.ClientReady, async () => {
@@ -129,7 +113,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const role = interaction.guild.roles.cache.get(guildSettings.role_id_to_ping);
-    const channel = interaction.guild.channels.cache.get(guildSettings.admin_channel_id);
+    const channel = interaction.guild.channels.cache.get(guildSettings.admin_channel_id) as Channel | null;
 
     const embed = new EmbedBuilder()
       .setTitle('🔧 Alert Settings')
@@ -158,7 +142,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
     const roleId = settings[gid].role_id_to_ping;
     const adminChannelId = settings[gid].admin_channel_id;
-    const adminChannel = guild.channels.cache.get(adminChannelId);
+    const adminChannel = guild.channels.cache.get(adminChannelId) as Channel | null;
 
     if (!isTextBasedChannel(adminChannel)) {
       console.warn(`Admin channel ${adminChannelId} is not a text-based channel.`);
@@ -207,7 +191,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       const originalData = flaggedMessages[originalMsgId];
 
       try {
-        const originalChannel = guild.channels.cache.get(originalData.channelId);
+        const originalChannel = guild.channels.cache.get(originalData.channelId) as Channel | null;
         if (isTextBasedChannel(originalChannel)) {
           const originalMessage = await originalChannel.messages.fetch(originalMsgId);
           await originalMessage.reactions.resolve(TARGET_EMOJI)?.users.remove(client.user!.id);
@@ -236,11 +220,15 @@ async function registerSlashCommands() {
     new SlashCommandBuilder()
       .setName('setalertchannel')
       .setDescription('Set the channel to receive 🛎️ alerts')
-      .addChannelOption((option) => option.setName('channel').setDescription('The channel to send alerts to').setRequired(true)),
+      .addChannelOption((option) =>
+        option.setName('channel').setDescription('The channel to send alerts to').setRequired(true)
+      ),
     new SlashCommandBuilder()
       .setName('setalertrole')
       .setDescription('Set the role to ping when a message is flagged')
-      .addRoleOption((option) => option.setName('role').setDescription('The role to mention').setRequired(true)),
+      .addRoleOption((option) =>
+        option.setName('role').setDescription('The role to mention').setRequired(true)
+      ),
     new SlashCommandBuilder().setName('viewalertsettings').setDescription('View the current alert settings'),
   ].map((cmd) => cmd.toJSON());
 
