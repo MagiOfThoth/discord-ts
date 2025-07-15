@@ -52,7 +52,6 @@ function saveSettings(settings: Settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
-// Safe runtime check for TextBasedChannel
 function isTextBasedChannel(channel: unknown): channel is TextBasedChannel {
   return (
     typeof channel === 'object' &&
@@ -194,7 +193,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         const originalChannel = guild.channels.cache.get(originalData.channelId) as Channel | null;
         if (isTextBasedChannel(originalChannel)) {
           const originalMessage = await originalChannel.messages.fetch(originalMsgId);
-          await originalMessage.reactions.resolve(TARGET_EMOJI)?.users.remove(client.user!.id);
+          await originalMessage.reactions.resolve(TARGET_EMOJI)?.users.remove(user.id); // ✅ FIXED: remove user's reaction
           console.log(`🗑️ Removed 🛎️ from original message: ${originalMsgId}`);
         }
       } catch (err) {
