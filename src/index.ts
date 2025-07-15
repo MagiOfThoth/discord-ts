@@ -11,9 +11,7 @@ import {
   TextChannel,
   Channel,
   NewsChannel,
-  PublicThreadChannel,
-  PrivateThreadChannel,
-  NewsThreadChannel,
+  ThreadChannel,
   CategoryChannel,
   StageChannel,
   VoiceChannel,
@@ -60,22 +58,20 @@ function saveSettings(settings: Settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
-// Type guard to check channel is a Discord.js Channel class (exclude API raw type)
+// Type guard to check channel is a Discord.js Channel class (excluding raw API types)
 function isDiscordJSChannel(
   channel: Channel | null | undefined
 ): channel is
   | TextChannel
   | NewsChannel
-  | PublicThreadChannel
-  | PrivateThreadChannel
-  | NewsThreadChannel
+  | ThreadChannel
   | CategoryChannel
   | StageChannel
   | VoiceChannel
   | ForumChannel {
   if (!channel) return false;
-  // Exclude raw APIInteractionDataResolvedChannel by checking for .isTextBased method existence
-  return typeof (channel as any).isTextBased === 'function';
+  // This check excludes raw API channels by verifying channel has 'isTextBased' method and 'type' property
+  return typeof (channel as any).isTextBased === 'function' && typeof (channel as any).type !== 'undefined';
 }
 
 // More specific guard for text-based channels:
