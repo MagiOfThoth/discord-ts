@@ -1,6 +1,3 @@
-// === rping-bot using Discord.js + TypeScript ===
-
-import 'dotenv/config';
 import {
   Client,
   GatewayIntentBits,
@@ -10,10 +7,11 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
-  Interaction,
-  TextChannel,
+  Interaction
 } from 'discord.js';
 import fs from 'fs';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const client = new Client({
   intents: [
@@ -21,9 +19,9 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMembers
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
 const TARGET_EMOJI = '🛎️';
@@ -33,7 +31,7 @@ let flaggedMessages: Record<string, string> = {};
 
 function loadSettings() {
   if (!fs.existsSync(SETTINGS_FILE)) return {};
-  return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+  return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
 }
 
 function saveSettings(settings: any) {
@@ -48,36 +46,35 @@ client.once(Events.ClientReady, async () => {
   await registerSlashCommands();
 });
 
-client.on(Events.InteractionCreate, async (interaction: Interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-  if (!interaction.guild) {
-    interaction.reply({ content: '❌ This command can only be used in servers.', ephemeral: true });
-    return;
-  }
+client.on(Events.InteractionCreate, async (interaction: Interaction): Promise<void> => {
+  if (!interaction.isChatInputCommand() || !interaction.guild) return;
 
   const gid = interaction.guild.id;
   const commandName = interaction.commandName;
 
   if (commandName === 'setalertchannel') {
-    const channel = interaction.options.getChannel('channel', true);
+    const channel = interaction.options.getChannel('channel');
+    if (!channel || !channel.isTextBased()) return;
+
     settings[gid] = settings[gid] || {};
     settings[gid].admin_channel_id = channel.id;
     saveSettings(settings);
+
     await interaction.reply({ content: `✅ Alert channel set to ${channel}`, ephemeral: true });
 
   } else if (commandName === 'setalertrole') {
-    const role = interaction.options.getRole('role', true);
+    const role = interaction.options.getRole('role');
+    if (!role) return;
+
     settings[gid] = settings[gid] || {};
     settings[gid].role_id_to_ping = role.id;
     saveSettings(settings);
+
     await interaction.reply({ content: `✅ Alert role set to ${role}`, ephemeral: true });
 
   } else if (commandName === 'viewalertsettings') {
     const guildSettings = settings[gid];
-    if (!guildSettings) {
-      await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
-      return;
-    }
+    if (!guildSettings) return await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
 
     const role = interaction.guild.roles.cache.get(guildSettings.role_id_to_ping);
     const channel = interaction.guild.channels.cache.get(guildSettings.admin_channel_id);
@@ -88,7 +85,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
         { name: 'Admin Channel', value: channel ? `<#${channel.id}>` : '`[Deleted]`' },
         { name: 'Ping Role', value: role ? `<@&${role.id}>` : '`[Deleted]`' }
       )
-      .setColor(0x00ff00);
+      .setColor(0x00FF00);
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
   }
@@ -106,17 +103,13 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     const gid = guild?.id;
     if (!gid || !settings[gid]) return;
 
-    const { role_id_to_ping: roleId, admin_channel_id: adminChannelId } = settings[gid];
-    const adminChannel = guild.channels.cache.get(adminChannelId) as TextChannel;
+    const roleId = settings[gid].role_id_to_ping;
+    const adminChannelId = settings[gid].admin_channel_id;
+    const adminChannel = guild.channels.cache.get(adminChannelId);
     const member = await guild.members.fetch(user.id);
 
     console.log(`📩 Reaction detected: ${reaction.emoji.name} by ${user.tag}`);
     console.log(`🔎 Settings for guild:`, settings[gid]);
-
-    if (!adminChannel) {
-      console.warn(`⚠️ Admin channel (${adminChannelId}) not found`);
-      return;
-    }
 
     if (reaction.emoji.name === TARGET_EMOJI) {
       if (flaggedMessages[message.id]) return;
@@ -132,40 +125,47 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
           { name: 'Jump to Message', value: `[Click here to view](${msgLink})` }
         )
         .setFooter({ text: `Message ID: ${message.id}` })
-        .setColor(0xffa500);
+        .setColor(0xFFA500);
 
-      try {
-        console.log(`📢 Sending alert to <#${adminChannelId}> tagging <@&${roleId}>`);
-        const botMsg = await adminChannel.send({
-          content: `<@&${roleId}>`,
-          embeds: [embed],
-        });
-        console.log(`✅ Alert message sent: ${botMsg.id}`);
-        await botMsg.react(RESOLVE_EMOJI);
-        flaggedMessages[message.id] = botMsg.id;
-      } catch (err) {
-        console.error('❌ Failed to send alert message:', err);
-      }
+      console.log(`📢 Sending alert to <#${adminChannelId}> tagging <@&${roleId}>`);
+      const botMsg = await (adminChannel as any).send({ content: `<@&${roleId}>`, embeds: [embed] });
+      await botMsg.react(RESOLVE_EMOJI);
+      flaggedMessages[message.id] = botMsg.id;
+
+      console.log(`✅ Alert message sent: ${botMsg.id}`);
 
     } else if (reaction.emoji.name === RESOLVE_EMOJI) {
-      if (!member.roles.cache.has(roleId)) return;
+      if (!member.roles.cache.has(roleId)) {
+        console.log(`⛔ User ${user.tag} does not have the required role.`);
+        return;
+      }
 
-      const originalId = Object.keys(flaggedMessages).find(key => flaggedMessages[key] === message.id);
-      if (!originalId) return;
+      const alertMessageId = reaction.message.id;
+      const originalId = Object.entries(flaggedMessages).find(([_, v]) => v === alertMessageId)?.[0];
+
+      if (!originalId) {
+        console.log('⚠️ No matching flagged message found.');
+        return;
+      }
 
       try {
-        const originalMsg = await message.channel.messages.fetch(originalId);
-        await originalMsg.reactions.resolve(TARGET_EMOJI)?.remove();
-      } catch {}
+        const originalChannel = await guild.channels.fetch(reaction.message.channelId);
+        if (originalChannel?.isTextBased()) {
+          const originalMessage = await originalChannel.messages.fetch(originalId);
+          await originalMessage.reactions.resolve(TARGET_EMOJI)?.remove();
+          console.log(`🧹 Removed 🛎️ from flagged message: ${originalId}`);
+        }
 
-      try {
-        await message.delete();
-      } catch {}
+        await reaction.message.delete();
+        console.log(`🗑️ Deleted alert message: ${alertMessageId}`);
+      } catch (err) {
+        console.error('❌ Error resolving alert:', err);
+      }
 
       delete flaggedMessages[originalId];
     }
   } catch (err) {
-    console.error('❌ Reaction handler error:', err);
+    console.error('❌ Reaction handler failed:', err);
   }
 });
 
@@ -173,7 +173,7 @@ async function registerSlashCommands() {
   const commands = [
     new SlashCommandBuilder()
       .setName('setalertchannel')
-      .setDescription('Set the channel to receive 🛎️ alerts')
+      .setDescription('Set the channel to receive 🛎 alerts')
       .addChannelOption(option =>
         option.setName('channel').setDescription('The channel to send alerts to').setRequired(true)
       ),
@@ -185,12 +185,12 @@ async function registerSlashCommands() {
       ),
     new SlashCommandBuilder()
       .setName('viewalertsettings')
-      .setDescription('View the current alert settings'),
+      .setDescription('View the current alert settings')
   ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN!);
   try {
-    const clientId = client.user?.id!;
+    const clientId = client.user!.id;
     const guilds = client.guilds.cache.map(g => g.id);
     for (const guildId of guilds) {
       await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
