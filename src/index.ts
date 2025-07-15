@@ -8,7 +8,14 @@ import {
   Routes, 
   SlashCommandBuilder, 
   TextBasedChannel, 
-  TextChannel 
+  TextChannel, 
+  Channel, 
+  NewsChannel, 
+  ThreadChannel, 
+  CategoryChannel, 
+  StageChannel, 
+  VoiceChannel, 
+  ForumChannel 
 } from 'discord.js';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -51,6 +58,23 @@ function saveSettings(settings: Settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
+// Type guard to check channel is Discord.js Channel class, excluding APIInteractionDataResolvedChannel
+function isDiscordJSChannel(channel: Channel | null | undefined): channel is
+  | TextChannel
+  | NewsChannel
+  | ThreadChannel
+  | CategoryChannel
+  | StageChannel
+  | VoiceChannel
+  | ForumChannel {
+  return !!channel && typeof (channel as any).isTextBased === 'function';
+}
+
+// More specific guard for text-based channels:
+function isTextBasedChannel(channel: Channel | null | undefined): channel is TextBasedChannel {
+  return isDiscordJSChannel(channel) && channel.isTextBased();
+}
+
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Logged in as ${client.user?.tag}`);
   await client.guilds.fetch();
@@ -65,7 +89,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (commandName === 'setalertchannel') {
     const channel = interaction.options.getChannel('channel');
-    if (!channel?.isTextBased()) {
+    if (!isTextBasedChannel(channel)) {
       await interaction.reply({ content: '❌ Please select a text-based channel.', ephemeral: true });
       return;
     }
@@ -116,10 +140,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-function isTextBasedChannel(channel: any): channel is TextBasedChannel {
-  return channel?.isTextBased && typeof channel.isTextBased === 'function' && channel.isTextBased();
-}
-
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
     if (reaction.partial) await reaction.fetch();
@@ -136,7 +156,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     const adminChannelId = settings[gid].admin_channel_id;
     const adminChannel = guild.channels.cache.get(adminChannelId);
 
-    // Only proceed if adminChannel is text based
     if (!isTextBasedChannel(adminChannel)) {
       console.warn(`Admin channel ${adminChannelId} is not a text-based channel.`);
       return;
