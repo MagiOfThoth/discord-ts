@@ -7,8 +7,7 @@ import {
   REST,
   Routes,
   SlashCommandBuilder,
-  Interaction,
-  TextBasedChannel
+  Interaction
 } from 'discord.js';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -55,7 +54,7 @@ client.on(Events.InteractionCreate, async (interaction: Interaction): Promise<vo
 
   if (commandName === 'setalertchannel') {
     const channel = interaction.options.getChannel('channel');
-    if (!channel || !TextBasedChannel.isTextBased(channel)) return;
+    if (!channel || !('send' in channel)) return;
 
     settings[gid] = settings[gid] || {};
     settings[gid].admin_channel_id = channel.id;
@@ -131,8 +130,10 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         .setFooter({ text: `Message ID: ${message.id}` })
         .setColor(0xFFA500);
 
+      if (!adminChannel || !('send' in adminChannel)) return;
+
       console.log(`📢 Sending alert to <#${adminChannelId}> tagging <@&${roleId}>`);
-      const botMsg = await (adminChannel as TextBasedChannel).send({ content: `<@&${roleId}>`, embeds: [embed] });
+      const botMsg = await adminChannel.send({ content: `<@&${roleId}>`, embeds: [embed] });
       await botMsg.react(RESOLVE_EMOJI);
       flaggedMessages[message.id] = botMsg.id;
 
