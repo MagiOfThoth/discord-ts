@@ -1,4 +1,15 @@
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, Events, REST, Routes, SlashCommandBuilder, TextChannel } from 'discord.js';
+import { 
+  Client, 
+  GatewayIntentBits, 
+  Partials, 
+  EmbedBuilder, 
+  Events, 
+  REST, 
+  Routes, 
+  SlashCommandBuilder, 
+  TextBasedChannel, 
+  TextChannel 
+} from 'discord.js';
 import dotenv from 'dotenv';
 import fs from 'fs';
 dotenv.config();
@@ -54,25 +65,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (commandName === 'setalertchannel') {
     const channel = interaction.options.getChannel('channel');
-    if (!channel?.isTextBased()) return interaction.reply({ content: '❌ Please select a text-based channel.', ephemeral: true });
+    if (!channel?.isTextBased()) {
+      await interaction.reply({ content: '❌ Please select a text-based channel.', ephemeral: true });
+      return;
+    }
 
     settings[gid] = settings[gid] || {} as GuildSettings;
     settings[gid].admin_channel_id = channel.id;
     saveSettings(settings);
-    return interaction.reply({ content: `✅ Alert channel set to ${channel}`, ephemeral: true });
 
-  } else if (commandName === 'setalertrole') {
+    await interaction.reply({ content: `✅ Alert channel set to ${channel}`, ephemeral: true });
+    return;
+  }
+
+  else if (commandName === 'setalertrole') {
     const role = interaction.options.getRole('role');
-    if (!role) return interaction.reply({ content: '❌ Please select a valid role.', ephemeral: true });
+    if (!role) {
+      await interaction.reply({ content: '❌ Please select a valid role.', ephemeral: true });
+      return;
+    }
 
     settings[gid] = settings[gid] || {} as GuildSettings;
     settings[gid].role_id_to_ping = role.id;
     saveSettings(settings);
-    return interaction.reply({ content: `✅ Alert role set to ${role}`, ephemeral: true });
 
-  } else if (commandName === 'viewalertsettings') {
+    await interaction.reply({ content: `✅ Alert role set to ${role}`, ephemeral: true });
+    return;
+  }
+
+  else if (commandName === 'viewalertsettings') {
     const guildSettings = settings[gid];
-    if (!guildSettings) return interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+    if (!guildSettings) {
+      await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+      return;
+    }
 
     const role = interaction.guild.roles.cache.get(guildSettings.role_id_to_ping);
     const channel = interaction.guild.channels.cache.get(guildSettings.admin_channel_id);
@@ -85,9 +111,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       )
       .setColor(0x00FF00);
 
-    return interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
   }
 });
+
+function isTextBasedChannel(channel: any): channel is TextBasedChannel {
+  return channel?.isTextBased && typeof channel.isTextBased === 'function' && channel.isTextBased();
+}
 
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   try {
@@ -103,7 +134,13 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
     const roleId = settings[gid].role_id_to_ping;
     const adminChannelId = settings[gid].admin_channel_id;
-    const adminChannel = guild.channels.cache.get(adminChannelId) as TextChannel;
+    const adminChannel = guild.channels.cache.get(adminChannelId);
+
+    // Only proceed if adminChannel is text based
+    if (!isTextBasedChannel(adminChannel)) {
+      console.warn(`Admin channel ${adminChannelId} is not a text-based channel.`);
+      return;
+    }
 
     console.log(`📩 Reaction detected: ${reaction.emoji.name} by ${user.tag}`);
     console.log(`🔎 Settings for guild:`, settings[gid]);
@@ -148,11 +185,10 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
       const originalData = flaggedMessages[originalMsgId];
 
-      // Try to remove 🛎️ from original message
       try {
         const originalChannel = guild.channels.cache.get(originalData.channelId);
-        if (originalChannel?.isTextBased()) {
-          const originalMessage = await (originalChannel as TextChannel).messages.fetch(originalMsgId);
+        if (isTextBasedChannel(originalChannel)) {
+          const originalMessage = await originalChannel.messages.fetch(originalMsgId);
           await originalMessage.reactions.resolve(TARGET_EMOJI)?.users.remove(client.user!.id);
           console.log(`🗑️ Removed 🛎️ from original message: ${originalMsgId}`);
         }
@@ -160,7 +196,6 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
         console.warn('⚠️ Could not remove 🛎️ from original message', err);
       }
 
-      // Try to delete the alert message
       try {
         await message.delete();
         console.log(`🗑️ Deleted alert message: ${message.id}`);
