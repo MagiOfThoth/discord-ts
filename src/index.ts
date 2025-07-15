@@ -11,8 +11,6 @@ import {
   Routes,
   SlashCommandBuilder,
   Interaction,
-  ChannelType,
-  Role,
   TextChannel,
 } from 'discord.js';
 import fs from 'fs';
@@ -53,7 +51,7 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   if (!interaction.isChatInputCommand()) return;
   if (!interaction.guild) {
-    await interaction.reply({ content: '❌ This command can only be used in servers.', ephemeral: true });
+    interaction.reply({ content: '❌ This command can only be used in servers.', ephemeral: true });
     return;
   }
 
@@ -77,7 +75,8 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   } else if (commandName === 'viewalertsettings') {
     const guildSettings = settings[gid];
     if (!guildSettings) {
-      return await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+      await interaction.reply({ content: `⚠️ No settings found.`, ephemeral: true });
+      return;
     }
 
     const role = interaction.guild.roles.cache.get(guildSettings.role_id_to_ping);
@@ -147,6 +146,7 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
       } catch (err) {
         console.error('❌ Failed to send alert message:', err);
       }
+
     } else if (reaction.emoji.name === RESOLVE_EMOJI) {
       if (!member.roles.cache.has(roleId)) return;
 
@@ -201,4 +201,4 @@ async function registerSlashCommands() {
   }
 }
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN!);
